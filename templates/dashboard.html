@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="row gx-3">
+
+  <!-- 🟦 Filtros mais colado à borda -->
+  <div class="col-12 col-md-2 mb-3">
+    <div class="bg-white p-3 rounded shadow-sm h-100">
+      <h6 class="mb-3">Filtros</h6>
+      <label class="form-label small">Mês</label>
+      <select class="form-select form-select-sm">
+        <option value="6">Junho</option>
+        <option value="7">Julho</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- 🟨 Calendário bem largo -->
+  <div class="col-12 col-md-7 mb-3">
+    <div class="bg-white p-3 rounded shadow-sm">
+      <h6 class="mb-3">Calendário Cirúrgico</h6>
+      <div id="calendar"></div>
+    </div>
+  </div>
+
+  <!-- 🟥 Ficha lateral -->
+  <div class="col-12 col-md-3 mb-3">
+    <div class="bg-white p-3 rounded shadow-sm">
+      <h6 class="mb-3">Ficha do Paciente</h6>
+      <p class="mb-1"><strong>Nome:</strong> <span id="ficha-nome">---</span></p>
+      <p class="mb-1"><strong>Prontuário:</strong> <span id="ficha-prontuario">---</span></p>
+      <p class="mb-1"><strong>Comorbidades:</strong><br><span id="ficha-comorbidades">---</span></p>
+      <p class="mb-1"><strong>Exames:</strong><br><span id="ficha-exames">---</span></p>
+    </div>
+  </div>
+
+</div>
+
+
+{% endblock %}
+
+{% block scripts %}
+<!-- CSS e JS do FullCalendar -->
+<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const calendarEl = document.getElementById('calendar');
+    if (!calendarEl) {
+        console.error("Elemento #calendar não encontrado.");
+        return;
+    }
+
+    const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'pt-br',
+        height: 550,
+        events: [
+            { title: 'Maria Silva', start: '2025-06-10', id: '1' },
+            { title: 'João Oliveira', start: '2025-06-14', id: '2' }
+        ],
+        eventClick: function(info) {
+            const ficha = {
+                1: {
+                    nome: 'Maria Silva',
+                    prontuario: 'A123456',
+                    comorbidades: 'Hipertensão',
+                    exames: 'Hemograma, Raio-X'
+                },
+                2: {
+                    nome: 'João Oliveira',
+                    prontuario: 'B789012',
+                    comorbidades: 'Diabetes Tipo 2',
+                    exames: 'Tomografia'
+                }
+            }[info.event.id];
+
+            if (ficha) {
+                document.getElementById('ficha-nome').innerText = ficha.nome;
+                document.getElementById('ficha-prontuario').innerText = ficha.prontuario;
+                document.getElementById('ficha-comorbidades').innerText = ficha.comorbidades;
+                document.getElementById('ficha-exames').innerText = ficha.exames;
+            }
+        }
+    });
+
+    calendar.render();
+});
+</script>
+{% endblock %}
