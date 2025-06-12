@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Cirurgias Canceladas{% endblock %}
+
+{% block content %}
+<div class="row gx-3">
+  <!-- Coluna principal com os pacientes -->
+  <div class="col-md-9 mb-3">
+    <div class="bg-white p-3 rounded shadow-sm">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0">Cirurgias Canceladas</h6>
+      </div>
+
+      <div id="lista-canceladas" class="d-flex flex-column gap-3">
+        <!-- Cards de pacientes virão aqui via JavaScript -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Ficha lateral -->
+  <div class="col-md-3 mb-3">
+    <div class="bg-white p-3 rounded shadow-sm">
+      <h6 class="mb-3">Ficha do Paciente</h6>
+
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-0">Nome</label>
+        <div class="form-control bg-light border-0" id="ficha-nome">---</div>
+      </div>
+
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-0">Prontuário</label>
+        <div class="form-control bg-light border-0" id="ficha-prontuario">---</div>
+      </div>
+
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-0">Comorbidades</label>
+        <div class="form-control bg-light border-0" id="ficha-comorbidades">---</div>
+      </div>
+
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-0">Tipo de Cirurgia</label>
+        <div class="form-control bg-light border-0" id="ficha-tipo">---</div>
+      </div>
+
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-0">Médico</label>
+        <div class="form-control bg-light border-0" id="ficha-medico">---</div>
+      </div>
+
+      <div class="text-center mt-3">
+        <button class="btn btn-primary btn-sm" id="btn-reagendar" disabled>Reagendar</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const container = document.getElementById("lista-canceladas");
+  const btnReagendar = document.getElementById("btn-reagendar");
+  let pacienteSelecionado = null;
+
+  fetch("/api/cirurgias_canceladas")
+    .then(res => res.json())
+    .then(lista => {
+      if (lista.length === 0) {
+        container.innerHTML = `<div class='text-muted small'>Nenhuma cirurgia cancelada no momento.</div>`;
+        return;
+      }
+
+      lista.forEach(p => {
+        const card = document.createElement("div");
+        card.className = "border rounded p-3 bg-light d-flex justify-content-between align-items-center cursor-pointer";
+        card.innerHTML = `
+          <div>
+            <strong>${p.nome}</strong><br>
+            <small>Prontuário: ${p.prontuario}</small>
+          </div>
+          <span class="badge bg-danger rounded-pill">cancelada</span>
+        `;
+
+        card.addEventListener("click", () => {
+          pacienteSelecionado = p;
+          document.getElementById("ficha-nome").innerText = p.nome;
+          document.getElementById("ficha-prontuario").innerText = p.prontuario;
+          document.getElementById("ficha-comorbidades").innerText = p.comorbidades || "---";
+          document.getElementById("ficha-tipo").innerText = p.tipo_cirurgia || "---";
+          document.getElementById("ficha-medico").innerText = p.medico || "---";
+          btnReagendar.disabled = false;
+        });
+
+        container.appendChild(card);
+      });
+    });
+
+  btnReagendar.addEventListener("click", () => {
+    if (!pacienteSelecionado) return;
+
+    fetch("/api/cirurgia/reagendar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prontuario: pacienteSelecionado.prontuario, data: pacienteSelecionado.data })
+    })
+    .then(res => res.json())
+    .then(resp => {
+      alert(resp.mensagem || "Paciente reagendado com sucesso");
+      window.location.href = "/"; // Redireciona para o calendário
+    });
+  });
+});
+</script>
+{% endblock %}

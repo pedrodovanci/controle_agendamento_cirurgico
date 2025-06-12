@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Cadastrar Cirurgia{% endblock %}
+
+{% block content %}
+{% set modo_visualizacao = modo_visualizacao if modo_visualizacao is defined else false %}
+
+<div class="row justify-content-center">
+  <div class="col-md-8">
+    <div class="bg-white p-4 rounded shadow-sm">
+      <h5 class="mb-4">{{ 'Detalhes da Cirurgia' if modo_visualizacao else 'Cadastrar Nova Cirurgia' }}</h5>
+
+      <form method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="mb-3">
+          <label class="form-label">Nome do Paciente</label>
+          <input type="text" name="nome" class="form-control" value="{{ cirurgia.nome if modo_visualizacao else '' }}" {{ 'readonly' if modo_visualizacao else '' }}>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Prontuário</label>
+          <input type="text" name="prontuario" class="form-control" value="{{ cirurgia.prontuario if modo_visualizacao else '' }}" {{ 'readonly' if modo_visualizacao else '' }}>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Idade</label>
+          <input type="number" name="idade" class="form-control" value="{{ cirurgia.idade if modo_visualizacao else '' }}" {{ 'readonly' if modo_visualizacao else '' }}>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Comorbidades</label>
+          <textarea name="comorbidades" class="form-control" rows="2" {{ 'readonly' if modo_visualizacao else '' }}>{{ cirurgia.comorbidades if modo_visualizacao else '' }}</textarea>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Anticoagulante</label><br>
+          {% for valor in ['sim', 'nao'] %}
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" name="anticoagulante" value="{{ valor }}" {% if modo_visualizacao %}disabled{% endif %} {% if cirurgia.anticoagulante == valor %}checked{% endif %}>
+            <label class="form-check-label">{{ valor|capitalize }}</label>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Materiais Utilizados</label><br>
+          {% set opcoes_materiais = ['neuronavegador', 'asp.ultrassonico', 'cell saver'] %}
+          {% for mat in opcoes_materiais %}
+          <div class="form-check">
+            <input class="form-check-input" type="checkbox" name="materiais" value="{{ mat }}" {% if modo_visualizacao %}disabled{% endif %}
+              {% if mat in cirurgia.materiais.split(',') %}checked{% endif %}>
+            <label class="form-check-label">{{ mat.replace('.', ' ').title() }}</label>
+          </div>
+          {% endfor %}
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Outros Materiais</label>
+          <input type="text" name="outros_materiais" class="form-control" value="{{ cirurgia.outros_materiais if modo_visualizacao else '' }}" {{ 'readonly' if modo_visualizacao else '' }}>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Data da Cirurgia</label>
+          <input type="date" name="data" class="form-control" required value="{{ cirurgia.data.strftime('%Y-%m-%d') if modo_visualizacao else data_previa }}" {{ 'readonly' if modo_visualizacao else '' }}>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Horário Início</label>
+          <input type="time" name="horario_inicio" class="form-control" value="{{ cirurgia.horario_inicio.strftime('%H:%M') if modo_visualizacao and cirurgia.horario_inicio else '' }}" {{ 'readonly' if modo_visualizacao else '' }}>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Horário Término</label>
+          <input type="time" name="horario_fim" class="form-control" value="{{ cirurgia.horario_fim.strftime('%H:%M') if modo_visualizacao and cirurgia.horario_fim else '' }}" {{ 'readonly' if modo_visualizacao else '' }}>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Tipo de Cirurgia</label>
+          <input type="text" name="tipo" class="form-control" value="{{ cirurgia.tipo if modo_visualizacao else '' }}" {{ 'readonly' if modo_visualizacao else '' }}>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Médico Responsável</label>
+          <input type="text" name="medico" class="form-control" value="{{ cirurgia.medico if modo_visualizacao else '' }}" {{ 'readonly' if modo_visualizacao else '' }}>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Status</label>
+          <select name="status" class="form-select" {% if modo_visualizacao %}disabled{% endif %}>
+            {% for st in ['agendada', 'realizada', 'cancelada', 'espera'] %}
+              <option value="{{ st }}" {% if cirurgia.status == st %}selected{% endif %}>{{ st.capitalize() }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label">Observações</label>
+          <textarea name="observacoes" class="form-control" rows="3" {{ 'readonly' if modo_visualizacao else '' }}>{{ cirurgia.observacoes if modo_visualizacao else '' }}</textarea>
+        </div>
+
+        {% if modo_visualizacao %}
+          <div class="text-end">
+            <a href="{{ url_for('cadastrar_cirurgia', prontuario=cirurgia.prontuario, editar='true') }}" class="btn btn-warning">Editar Agendamento</a>
+          </div>
+        {% else %}
+          <div class="mb-3">
+            <label class="form-label">Exames Recentes</label>
+            <input type="file" name="exames" class="form-control" multiple accept="image/*,.pdf">
+          </div>
+          <div class="text-end">
+            <button type="submit" class="btn btn-primary">Salvar Cirurgia</button>
+          </div>
+        {% endif %}
+
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -4,89 +4,153 @@
 {% block content %}
 <div class="row gx-3">
 
-  <!-- 🟦 Filtros mais colado à borda -->
+  <!-- 🟦 Filtros -->
   <div class="col-12 col-md-2 mb-3">
     <div class="bg-white p-3 rounded shadow-sm h-100">
       <h6 class="mb-3">Filtros</h6>
-      <label class="form-label small">Mês</label>
-      <select class="form-select form-select-sm">
-        <option value="6">Junho</option>
-        <option value="7">Julho</option>
+
+      <label for="mes" class="form-label small">Mês</label>
+      <select id="mes" class="form-select form-select-sm mb-3">
+        <option value="2025-06-01">Junho</option>
+        <option value="2025-07-01">Julho</option>
       </select>
+
+      <label for="status" class="form-label small">Status</label>
+      <select id="status" class="form-select form-select-sm">
+        <option value="">Todos</option>
+        <option value="agendada">Agendada</option>
+        <option value="realizada">Realizada</option>
+        <option value="cancelada">Cancelada</option>
+      </select>
+
+      <div class="text-center mt-3">
+        <button onclick="window.location.href='/cadastrar_cirurgia'" class="btn btn-primary btn-sm w-100">+ Nova Cirurgia</button>
+      </div>
     </div>
   </div>
 
-  <!-- 🟨 Calendário bem largo -->
+  <!-- 🟨 Calendário -->
   <div class="col-12 col-md-7 mb-3">
     <div class="bg-white p-3 rounded shadow-sm">
       <h6 class="mb-3">Calendário Cirúrgico</h6>
-      <div id="calendar"></div>
+      <div id="calendar" class="bg-white p-2 border rounded shadow-sm"></div>
     </div>
   </div>
 
-  <!-- 🟥 Ficha lateral -->
+  <!-- 🟥 Resumo do Agendamento -->
   <div class="col-12 col-md-3 mb-3">
-    <div class="bg-white p-3 rounded shadow-sm">
-      <h6 class="mb-3">Ficha do Paciente</h6>
-      <p class="mb-1"><strong>Nome:</strong> <span id="ficha-nome">---</span></p>
-      <p class="mb-1"><strong>Prontuário:</strong> <span id="ficha-prontuario">---</span></p>
-      <p class="mb-1"><strong>Comorbidades:</strong><br><span id="ficha-comorbidades">---</span></p>
-      <p class="mb-1"><strong>Exames:</strong><br><span id="ficha-exames">---</span></p>
+    <div class="bg-white p-4 rounded shadow-sm">
+      <h5 class="text-center fw-semibold mb-4">Resumo do Agendamento</h5>
+
+      <div class="mb-2">
+        <label class="form-label small text-muted mb-0">Nome do Paciente</label>
+        <div class="form-control bg-light border-0" id="ficha-nome">---</div>
+      </div>
+
+      <div class="mb-2">
+        <label class="form-label small text-muted mb-0">Prontuário</label>
+        <div class="form-control bg-light border-0" id="ficha-prontuario">---</div>
+      </div>
+
+      <div class="mb-2">
+        <label class="form-label small text-muted mb-0">Médico Responsável</label>
+        <div class="form-control bg-light border-0" id="ficha-medico">---</div>
+      </div>
+
+      <div class="mb-2">
+        <label class="form-label small text-muted mb-0">Horário</label>
+        <div class="form-control bg-light border-0" id="ficha-horario">---</div>
+      </div>
+
+      <div class="mb-3">
+        <label class="form-label small text-muted mb-0">Anotações Complementares</label>
+        <div class="form-control bg-light border-0" id="ficha-observacoes" style="min-height: 100px;">---</div>
+      </div>
+
+      <div class="text-end">
+        <span id="ficha-status" class="badge px-3 py-2 rounded-pill text-white bg-secondary">---</span>
+      </div>
     </div>
   </div>
 
 </div>
-
-
 {% endblock %}
 
 {% block scripts %}
-<!-- CSS e JS do FullCalendar -->
-<link href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
 
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const calendarEl = document.getElementById('calendar');
-    if (!calendarEl) {
-        console.error("Elemento #calendar não encontrado.");
-        return;
-    }
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const calendarEl = document.getElementById('calendar');
+      if (!calendarEl) return;
 
-    const calendar = new FullCalendar.Calendar(calendarEl, {
+      const calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
         locale: 'pt-br',
         height: 550,
-        events: [
-            { title: 'Maria Silva', start: '2025-06-10', id: '1' },
-            { title: 'João Oliveira', start: '2025-06-14', id: '2' }
-        ],
+
+        events: function(fetchInfo, successCallback, failureCallback) {
+          const status = document.getElementById('status').value;
+          fetch('/api/cirurgias?status=' + status)
+            .then(response => response.json())
+            .then(data => successCallback(data))
+            .catch(error => failureCallback(error));
+        },
+
         eventClick: function(info) {
-            const ficha = {
-                1: {
-                    nome: 'Maria Silva',
-                    prontuario: 'A123456',
-                    comorbidades: 'Hipertensão',
-                    exames: 'Hemograma, Raio-X'
-                },
-                2: {
-                    nome: 'João Oliveira',
-                    prontuario: 'B789012',
-                    comorbidades: 'Diabetes Tipo 2',
-                    exames: 'Tomografia'
-                }
-            }[info.event.id];
+          const props = info.event.extendedProps;
+          console.log("📋 Dados do evento:", props);
 
-            if (ficha) {
-                document.getElementById('ficha-nome').innerText = ficha.nome;
-                document.getElementById('ficha-prontuario').innerText = ficha.prontuario;
-                document.getElementById('ficha-comorbidades').innerText = ficha.comorbidades;
-                document.getElementById('ficha-exames').innerText = ficha.exames;
-            }
+          document.getElementById('ficha-nome').innerText = info.event.title;
+          document.getElementById('ficha-prontuario').innerText = props.prontuario || '---';
+          document.getElementById('ficha-comorbidades')?.remove();
+          document.getElementById('ficha-exames')?.remove();
+          document.getElementById('ficha-tipo')?.remove();
+
+          document.getElementById('ficha-medico').innerText = props.medico || '---';
+          document.getElementById('ficha-horario').innerText = props.horario || '---';
+          document.getElementById('ficha-observacoes').innerText = props.observacoes || '---';
+          document.getElementById('ficha-anticoagulante').value = props.anticoagulante || '---';
+          document.getElementById('ficha-materiais').value = props.materiais || '---';
+          document.getElementById('ficha-outros').value = props.outros_materiais || '---';
+
+          const statusSpan = document.getElementById('ficha-status');
+          statusSpan.innerText = props.status || '---';
+          statusSpan.className = 'badge px-3 py-2 rounded-pill text-white ' + (
+            {
+              agendada: 'bg-primary',
+              realizada: 'bg-success',
+              cancelada: 'bg-danger'
+            }[props.status] || 'bg-secondary'
+          );
+        },
+
+        dateClick: function(info) {
+          const dataSelecionada = info.dateStr;
+
+          fetch(`/verificar_cirurgias?data=${dataSelecionada}`)
+            .then(res => res.json())
+            .then(data => {
+              if (data.tem_cirurgias) {
+                window.location.href = `/cirurgias_por_dia?data=${dataSelecionada}`;
+              }
+            })
+            .catch(err => {
+              console.error('Erro ao verificar cirurgias:', err);
+              window.location.href = `/cadastrar_cirurgia?data=${dataSelecionada}`;
+            });
         }
-    });
+      });
 
-    calendar.render();
-});
-</script>
+      calendar.render();
+
+      document.getElementById('mes')?.addEventListener('change', function () {
+        calendar.gotoDate(this.value);
+      });
+
+      document.getElementById('status')?.addEventListener('change', function () {
+        calendar.refetchEvents();
+      });
+    });
+  </script>
 {% endblock %}

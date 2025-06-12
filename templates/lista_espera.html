@@ -2,8 +2,91 @@
 {% block title %}Lista de Espera{% endblock %}
 
 {% block content %}
-<div class="bg-white p-4 rounded shadow-sm">
-    <h5 class="mb-3">Lista de Espera</h5>
-    <p class="text-muted">Esta é a página da lista de espera. Em breve será possível visualizar e gerenciar pacientes aguardando cirurgia.</p>
+<div class="row gx-3">
+
+  <!-- Coluna principal com os pacientes -->
+  <div class="col-md-9 mb-3">
+    <div class="bg-white p-3 rounded shadow-sm">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h6 class="mb-0">Pacientes na Fila</h6>
+        <button class="btn btn-primary btn-sm" onclick="window.location.href='/novo_paciente_espera'">
+            + Adicionar à espera
+        </button>
+      </div>
+
+      <div id="lista-espera" class="d-flex flex-column gap-3">
+        <!-- Cards de pacientes virão aqui via JavaScript -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Ficha lateral -->
+  <div class="col-md-3 mb-3">
+    <div class="bg-white p-3 rounded shadow-sm">
+      <h6 class="mb-3">Ficha do Paciente</h6>
+
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-0">Nome</label>
+        <div class="form-control bg-light border-0" id="ficha-nome">---</div>
+      </div>
+
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-0">Prontuário</label>
+        <div class="form-control bg-light border-0" id="ficha-prontuario">---</div>
+      </div>
+
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-0">Comorbidades</label>
+        <div class="form-control bg-light border-0" id="ficha-comorbidades">---</div>
+      </div>
+
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-0">Tipo de Cirurgia</label>
+        <div class="form-control bg-light border-0" id="ficha-tipo">---</div>
+      </div>
+
+      <div class="mb-2">
+        <label class="form-label small fw-semibold mb-0">Status</label>
+        <span id="ficha-status" class="badge bg-warning text-dark rounded-pill px-3 py-2">espera</span>
+      </div>
+    </div>
+  </div>
+
 </div>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+    const container = document.getElementById('lista-espera');
+
+    fetch('/api/lista_espera')
+        .then(res => res.json())
+        .then(pacientes => {
+        if (pacientes.length === 0) {
+            container.innerHTML = `<div class="text-muted small">Nenhum paciente na fila.</div>`;
+            return;
+        }
+
+        pacientes.forEach(p => {
+            const card = document.createElement('div');
+            card.className = 'border rounded p-3 bg-light d-flex justify-content-between align-items-center cursor-pointer';
+            card.innerHTML = `
+            <div>
+                <strong>${p.nome}</strong><br>
+                <small>Prontuário: ${p.prontuario}</small>
+            </div>
+            <span class="badge bg-warning text-dark rounded-pill">espera</span>
+            `;
+
+            card.addEventListener('click', () => {
+            document.getElementById('ficha-nome').innerText = p.nome;
+            document.getElementById('ficha-prontuario').innerText = p.prontuario || '---';
+            document.getElementById('ficha-comorbidades').innerText = p.comorbidades || '---';
+            document.getElementById('ficha-tipo').innerText = p.tipo_cirurgia || '---';
+            document.getElementById('ficha-status').innerText = 'espera';
+            });
+
+            container.appendChild(card);
+        });
+        });
+    });
+    </script>
 {% endblock %}
