@@ -1,6 +1,6 @@
 from flask import Flask, flash, render_template, redirect, session, url_for,request,jsonify
 from config import Config
-from models import db, ListaEspera, Cirurgia, Paciente
+from models import db, ListaEspera, Cirurgia, Paciente, Exame
 from auth import auth, bcrypt, csrf
 from datetime import datetime, time
 
@@ -199,18 +199,90 @@ def api_cirurgias_por_data():
 
 
 @app.route("/cirurgias_por_dia")
-def cirurgias_por_dia_query():
-    data = request.args.get("data")
-    if not data:
-        return "Data não informada", 400
-    return render_template("cirurgias_por_dia.html", data=data)
+def cirurgias_por_dia():
+    data_str = request.args.get("data")
+    if not data_str:
+        flash("Data inválida.", "danger")
+        return redirect(url_for("dashboard"))
+
+    try:
+        data = datetime.strptime(data_str, "%Y-%m-%d").date()
+    except ValueError:
+        flash("Formato de data inválido.", "danger")
+        return redirect(url_for("dashboard"))
+
+    cirurgia = Cirurgia.query.join(Paciente).filter(
+        db.func.date(Cirurgia.data) == data
+    ).order_by(Cirurgia.horario_inicio.asc()).first()
+
+    if not cirurgia:
+        flash("Nenhuma cirurgia agendada para este dia.", "warning")
+        return redirect(url_for("dashboard"))
+
+    exames = Exame.query.filter_by(cirurgia_id=cirurgia.id).all()
+
+    return render_template(
+        "cadastrar_cirurgia.html",
+        modo_visualizacao=True,
+        cirurgia=cirurgia,
+        paciente=cirurgia.paciente,
+        exames=exames,
+        data_previa=cirurgia.data.strftime('%Y-%m-%d')
+    )
 
 
-@app.route("/cirurgias_por_dia/<data>")
-def cirurgias_por_dia(data):
-    data_convertida = datetime.strptime(data, "%Y-%m-%d").date()
-    cirurgias = Cirurgia.query.filter(db.func.date(Cirurgia.data) == data_convertida).all()
-    return render_template("cirurgias_por_dia.html", data=data_convertida, cirurgias=cirurgias)
+@app.route("/editar_cirurgia/<int:cirurgia_id>", methods=["GET", "POST"])
+def editar_cirurgia(cirurgia_id):
+    cirurgia = Cirurgia.query.get_or_404(cirurgia_id)
+    paciente = cirurgia.paciente
+
+    if request.method == "POST":
+        # Atualiza os dados
+        paciente.nome = request.form["nome"]
+        paciente.prontuario = request.form["prontuario"]
+        paciente.idade = request.form.get("idade")
+        paciente.comorbidades = request.form.get("comorbidades")
+
+        cirurgia.tipo = request.form["tipo"]
+        cirurgia.medico = request.form["medico"]
+        cirurgia.status = request.form["status"]
+        cirurgia.data = datetime.strptime(request.form["data"], "%Y-%m-%d")
+        cirurgia.horario_inicio = datetime.strptime(request.form["horario_inicio"], "%H:%M").time() if request.form.get("horario_inicio") else None
+        cirurgia.horario_fim = datetime.strptime(request.form["horario_fim"], "%H:%M").time() if request.form.get("horario_fim") else None
+        cirurgia.anticoagulante = request.form.get("anticoagulante")
+        cirurgia.materiais = ",".join(request.form.getlist("materiais"))
+        cirurgia.outros_materiais = request.form.get("outros_materiais")
+        cirurgia.observacoes = request.form.get("observacoes")
+
+        # Atualiza exames (opcional, aqui não remove os antigos)
+        from werkzeug.utils import secure_filename
+        import os
+        arquivos = request.files.getlist("exames")
+        for arquivo in arquivos:
+            if arquivo.filename:
+                nome = secure_filename(arquivo.filename)
+                timestamp = datetime.utcnow().strftime('%Y%m%d%H%M%S')
+                caminho = os.path.join("static", "uploads", f"{timestamp}_{nome}")
+                os.makedirs("static/uploads", exist_ok=True)
+                arquivo.save(caminho)
+                novo_exame = Exame(cirurgia_id=cirurgia.id, caminho_arquivo=caminho, descricao=nome)
+                db.session.add(novo_exame)
+
+        db.session.commit()
+        flash("Cirurgia atualizada com sucesso!", "success")
+        return redirect(url_for("dashboard"))
+
+    exames = Exame.query.filter_by(cirurgia_id=cirurgia.id).all()
+
+    return render_template(
+        "cadastrar_cirurgia.html",
+        modo_edicao=True,
+        cirurgia=cirurgia,
+        paciente=paciente,
+        exames=exames,
+        data_previa=cirurgia.data.strftime('%Y-%m-%d')
+    )
+
 
 @app.route("/verificar_cirurgias")
 def verificar_cirurgias():
