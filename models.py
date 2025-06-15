@@ -1,6 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 
+
 db = SQLAlchemy()
 
 class Usuario(db.Model):
@@ -23,21 +24,19 @@ class Paciente(db.Model):
 
 class Cirurgia(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    paciente_id = db.Column(db.Integer, db.ForeignKey('paciente.id'))
+    paciente_id = db.Column(db.Integer, db.ForeignKey('paciente.id'), nullable=False)
     paciente = db.relationship('Paciente', backref='cirurgias')
-    
-    data = db.Column(db.DateTime)
-    tipo = db.Column(db.String(100))
-    medico = db.Column(db.String(100))
-    status = db.Column(db.String(20))  # agendada, realizada, cancelada, espera
+
+    data = db.Column(db.DateTime, nullable=False)
+    tipo = db.Column(db.String(100), nullable=False)
+    medico = db.Column(db.String(100), nullable=False)
+    status = db.Column(db.String(20), nullable=False)  # agendada, realizada, cancelada, espera
     horario_inicio = db.Column(db.Time)
     horario_fim = db.Column(db.Time)
 
-    # CORRIGIDO:
     anticoagulante = db.Column(db.String(3))  # 'sim' ou 'nao'
-    materiais = db.Column(db.String(200))     # ← CORRIGIDO AQUI
+    materiais = db.Column(db.String(200))     # Ex: 'neuronavegador,asp.ultrassonico'
     outros_materiais = db.Column(db.Text)
-
     observacoes = db.Column(db.Text)
 
 class Exame(db.Model):

@@ -54,39 +54,60 @@
 
 </div>
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
-    const container = document.getElementById('lista-espera');
+document.addEventListener('DOMContentLoaded', function () {
+  const container = document.getElementById('lista-espera');
 
-    fetch('/api/lista_espera')
-        .then(res => res.json())
-        .then(pacientes => {
-        if (pacientes.length === 0) {
-            container.innerHTML = `<div class="text-muted small">Nenhum paciente na fila.</div>`;
-            return;
-        }
+  // Verifica se há algum prontuário que precisa ser removido visualmente
+  const prontuarioRemover = localStorage.getItem('remover_da_espera');
+  if (prontuarioRemover) {
+    localStorage.removeItem('remover_da_espera');
+  }
 
-        pacientes.forEach(p => {
-            const card = document.createElement('div');
-            card.className = 'border rounded p-3 bg-light d-flex justify-content-between align-items-center cursor-pointer';
-            card.innerHTML = `
-            <div>
-                <strong>${p.nome}</strong><br>
-                <small>Prontuário: ${p.prontuario}</small>
-            </div>
+  fetch('/api/lista_espera')
+    .then(res => res.json())
+    .then(pacientes => {
+      if (pacientes.length === 0) {
+        container.innerHTML = `<div class="text-muted small">Nenhum paciente na fila.</div>`;
+        return;
+      }
+
+      pacientes.forEach(p => {
+        if (prontuarioRemover && p.prontuario === prontuarioRemover) return;
+
+        const card = document.createElement('div');
+        card.className = 'border rounded p-3 bg-light d-flex justify-content-between align-items-center';
+
+        card.innerHTML = `
+          <div>
+            <strong>${p.nome}</strong><br>
+            <small>Prontuário: ${p.prontuario}</small>
+          </div>
+          <div class="d-flex gap-2 align-items-center">
             <span class="badge bg-warning text-dark rounded-pill">espera</span>
-            `;
+            <button class="btn btn-sm btn-outline-primary" onclick="agendarPaciente('${p.prontuario}')">
+              Agendar
+            </button>
+          </div>
+        `;
 
-            card.addEventListener('click', () => {
-            document.getElementById('ficha-nome').innerText = p.nome;
-            document.getElementById('ficha-prontuario').innerText = p.prontuario || '---';
-            document.getElementById('ficha-comorbidades').innerText = p.comorbidades || '---';
-            document.getElementById('ficha-tipo').innerText = p.tipo_cirurgia || '---';
-            document.getElementById('ficha-status').innerText = 'espera';
-            });
+        card.addEventListener('click', () => {
+          document.getElementById('ficha-nome').innerText = p.nome;
+          document.getElementById('ficha-prontuario').innerText = p.prontuario || '---';
+          document.getElementById('ficha-comorbidades').innerText = p.comorbidades || '---';
+          document.getElementById('ficha-tipo').innerText = p.tipo_cirurgia || '---';
+          document.getElementById('ficha-status').innerText = 'espera';
+        });
 
-            container.appendChild(card);
-        });
-        });
+        container.appendChild(card);
+      });
     });
-    </script>
+});
+
+// Redireciona para o formulário de cirurgia com os dados da lista
+function agendarPaciente(prontuario) {
+  localStorage.setItem('remover_da_espera', prontuario);
+  window.location.href = `/cadastrar_cirurgia?prontuario=${prontuario}`;
+}
+</script>
+
 {% endblock %}

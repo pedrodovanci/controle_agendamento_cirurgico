@@ -3,12 +3,16 @@ from config import Config
 from models import db, ListaEspera, Cirurgia, Paciente, Exame
 from auth import auth, bcrypt, csrf
 from datetime import datetime, time
+from flask_migrate import Migrate
 
 
 app = Flask(__name__)
 app.config.from_object(Config)
-
 db.init_app(app)
+
+migrate = Migrate(app, db)
+
+
 bcrypt.init_app(app)
 csrf.init_app(app)
 app.register_blueprint(auth)
@@ -45,52 +49,67 @@ def api_lista_espera():
 
 @app.route("/novo_paciente_espera")
 def novo_paciente_espera():
-    return render_template("form_lista_espera.html")
+    return render_template(
+        "cadastrar_cirurgia.html",
+        modo_visualizacao=False,
+        modo_edicao=False,
+        cirurgia=None,
+        paciente=None,
+        exames=[],
+        data_previa="",  # sem data definida ainda
+        status_padrao="espera"  # vamos usar isso no HTML
+    )
 
 
 @app.route("/api/cirurgias")
 def api_cirurgias():
-    status = request.args.get("status")
-   
+    try:
+        status = request.args.get("status")
+        query = Cirurgia.query.join(Paciente)
 
-    query = Cirurgia.query.join(Paciente)
-    if status:
-        query = query.filter(Cirurgia.status == status)
+        if status:
+            query = query.filter(Cirurgia.status == status)
 
-    cirurgias = query.all()
+        cirurgias = query.all()
     
+        eventos = []
+        for i, c in enumerate(cirurgias):
 
-    eventos = []
-    for cirurgia in cirurgias:
-        
-        eventos.append({
-            "id": cirurgia.id,
-            "title": cirurgia.paciente.nome,
-            "start": cirurgia.data.strftime("%Y-%m-%d"),
-            "color": (
-                "#0d6efd" if cirurgia.status == "agendada"
-                else "#198754" if cirurgia.status == "realizada"
-                else "#dc3545"
-            ),
-            "extendedProps": {
-                "status": cirurgia.status,
-                "prontuario": cirurgia.paciente.prontuario,
-                "comorbidades": cirurgia.paciente.comorbidades,
-                "exames": [],
-                "medico": cirurgia.medico or "---",
-                "horario": (
-                    f"{cirurgia.horario_inicio.strftime('%H:%M')} - {cirurgia.horario_fim.strftime('%H:%M')}"
-                    if cirurgia.horario_inicio and cirurgia.horario_fim else "---"
-                ),
-                "observacoes": cirurgia.observacoes or "---",
-                "anticoagulante": str(cirurgia.anticoagulante or "---"),
-                "materiais": str(cirurgia.materiais or "---"),
-                "outros_materiais": str(cirurgia.outros_materiais or "---")
+            status_colors = {
+                'agendada': '#4D8CFF',
+                'realizada': '#28a745',
+                'cancelada': '#dc3545'
             }
-        })
+            color = status_colors.get(c.status, '#6c757d')
 
-    return jsonify(eventos)
+            evento = {
+                "title": str(c.paciente.nome),
+                "start": c.data.strftime("%Y-%m-%d") if c.data else "",
+                "color": color,
+                "extendedProps": {
+                    "prontuario": str(c.paciente.prontuario or ""),
+                    "medico": str(c.medico or ""),
+                    "status": str(c.status or ""),
+                    "horario": (
+                        f"{c.horario_inicio.strftime('%H:%M')} - {c.horario_fim.strftime('%H:%M')}"
+                        if c.horario_inicio and c.horario_fim else ""
+                    ),
+                    "observacoes": str(c.observacoes or ""),
+                    "anticoagulante": str(c.anticoagulante or ""),
+                    "materiais": str(c.materiais or ""),
+                    "outros_materiais": str(c.outros_materiais or "")
+                },
+                "classNames": [str(c.status or "desconhecido")]
+            }
 
+            eventos.append(evento)
+
+        print("✅ Eventos montados com sucesso.")
+        return jsonify(eventos)
+
+    except Exception as e:
+        print("💥 ERRO ao gerar eventos do calendário:", e)
+        return jsonify({"erro": "Falha no servidor ao buscar cirurgias"}), 500
 
 
 @app.route("/cadastrar_cirurgia", methods=["GET", "POST"])
@@ -103,8 +122,8 @@ def cadastrar_cirurgia():
         medico = request.form["medico"]
         status = request.form["status"]
         data = datetime.strptime(request.form["data"], "%Y-%m-%d")
+        anticoagulante = request.form["anticoagulante"]
 
-        # Verifica se paciente já existe
         paciente = Paciente.query.filter_by(prontuario=prontuario).first()
         if not paciente:
             paciente = Paciente(nome=nome, prontuario=prontuario, comorbidades=comorbidades)
@@ -123,9 +142,16 @@ def cadastrar_cirurgia():
             status=status,
             horario_inicio=datetime.strptime(horario_inicio, "%H:%M").time() if horario_inicio else None,
             horario_fim=datetime.strptime(horario_fim, "%H:%M").time() if horario_fim else None,
-            observacoes=observacoes
+            observacoes=observacoes,
+            anticoagulante=anticoagulante 
         )
         db.session.add(cirurgia)
+
+        # 🗑️ Remover da lista de espera, se existir
+        espera = ListaEspera.query.filter_by(prontuario=prontuario).first()
+        if espera:
+            db.session.delete(espera)
+
         db.session.commit()
 
         # Upload de exames
@@ -140,17 +166,39 @@ def cadastrar_cirurgia():
                     timestamp = datetime.utcnow().strftime('%Y%m%d%H%M%S')
                     novo_nome = f"{timestamp}_{filename}"
                     UPLOAD_FOLDER = os.path.join('static', 'uploads')
-                    os.makedirs(UPLOAD_FOLDER, exist_ok=True)  # ← cria a pasta se não existir
+                    os.makedirs(UPLOAD_FOLDER, exist_ok=True)
                     caminho = os.path.join('static/uploads', novo_nome)
                     arquivo.save(caminho)
-                    # salvar no banco (opcional)
 
         flash("Cirurgia cadastrada com sucesso!", "success")
         return redirect(url_for("dashboard"))
 
-    # GET request
+    # GET
     data_previa = request.args.get("data", "")
-    return render_template("cadastrar_cirurgia.html", data_previa=data_previa)
+    prontuario_espera = request.args.get("prontuario")
+
+    paciente = None
+    if prontuario_espera:
+        espera = ListaEspera.query.filter_by(prontuario=prontuario_espera).first()
+        if espera:
+            paciente = Paciente(
+                nome=espera.nome_paciente,
+                prontuario=espera.prontuario,
+                comorbidades=espera.comorbidades,
+            )
+
+    return render_template(
+        "cadastrar_cirurgia.html",
+        modo_visualizacao=False,
+        modo_edicao=False,
+        cirurgia=None,
+        paciente=paciente,
+        exames=[],
+        data_previa=data_previa,
+        status_padrao="espera"
+    )
+
+
 
 @app.route("/api/cirurgias_por_data")
 def api_cirurgias_por_data():
@@ -403,6 +451,43 @@ def reagendar_cirurgia():
     db.session.commit()
 
     return jsonify({"mensagem": "Cirurgia reagendada com sucesso"})
+
+@app.route('/api/cirurgia/alterar_status', methods=["POST"])
+@csrf.exempt
+def alterar_status_cirurgia():
+    try:
+        data = request.get_json()
+        print("🔎 JSON recebido:", data)
+
+        prontuario = data.get("prontuario")
+        data_str = data.get("data")
+        novo_status = data.get("novo_status")
+
+        if not (prontuario and data_str and novo_status):
+            print("❌ Dados incompletos")
+            return jsonify({"erro": "Dados incompletos"}), 400
+
+        data_obj = datetime.strptime(data_str, "%Y-%m-%d").date()
+
+        cirurgia = Cirurgia.query.join(Paciente).filter(
+            Paciente.prontuario == prontuario,
+            db.func.date(Cirurgia.data) == data_obj
+        ).first()
+
+        if not cirurgia:
+            print("⚠️ Cirurgia não encontrada.")
+            return jsonify({"erro": "Cirurgia não encontrada"}), 404
+
+        cirurgia.status = novo_status
+        db.session.commit()
+
+        print("✅ Status atualizado com sucesso!")
+        return jsonify({"mensagem": "Status atualizado com sucesso!"})
+
+    except Exception as e:
+        print("💥 Erro:", e)
+        return jsonify({"erro": "Falha no servidor"}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True)

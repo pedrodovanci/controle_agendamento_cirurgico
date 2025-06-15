@@ -4,6 +4,8 @@ from flask_bcrypt import Bcrypt
 from flask_wtf.csrf import CSRFProtect
 from forms import LoginForm  # <-- NOVO
 
+
+
 auth = Blueprint('auth', __name__)
 bcrypt = Bcrypt()
 csrf = CSRFProtect()
