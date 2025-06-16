@@ -77,8 +77,10 @@
             <option value="agendada">Agendada</option>
             <option value="realizada">Realizada</option>
             <option value="cancelada">Cancelada</option>
+            <option value="espera">Espera</option>
           </select>
           <button id="btn-alterar-status" class="btn btn-sm btn-outline-dark">OK</button>
+          <button id="btn-excluir-agendamento" class="btn btn-sm btn-outline-danger">Excluir agendamento</button>
         </div>
       </div>
 
@@ -98,7 +100,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const calendarEl = document.getElementById('calendar');
   if (!calendarEl) return;
 
-  let eventoAtual = null;  // ✅ Correção adicionada
+  let eventoAtual = null;
 
   const calendar = new FullCalendar.Calendar(calendarEl, {
     initialView: 'dayGridMonth',
@@ -129,14 +131,15 @@ document.addEventListener('DOMContentLoaded', function () {
         {
           agendada: 'bg-primary',
           realizada: 'bg-success',
-          cancelada: 'bg-danger'
+          cancelada: 'bg-danger',
+          espera: 'bg-warning text-dark'
         }[props.status] || 'bg-secondary'
       );
+
       const opcaoAtual = document.getElementById('opcao-atual');
       opcaoAtual.innerText = props.status?.charAt(0).toUpperCase() + props.status?.slice(1);
       opcaoAtual.value = props.status || '';
       document.getElementById('status-alterar').value = props.status || '';
-
     },
 
     dateClick: function(info) {
@@ -185,13 +188,13 @@ document.addEventListener('DOMContentLoaded', function () {
     .then(resp => {
       alert(resp.mensagem || "Status alterado.");
 
-      // Atualiza status no card lateral
       const statusSpan = document.getElementById('ficha-status');
       statusSpan.innerText = novoStatus;
       const cores = {
         agendada: 'bg-primary',
         realizada: 'bg-success',
-        cancelada: 'bg-danger'
+        cancelada: 'bg-danger',
+        espera: 'bg-warning text-dark'
       };
       statusSpan.className = 'badge px-3 py-2 rounded-pill text-white ' + (cores[novoStatus] || 'bg-secondary');
 
@@ -201,6 +204,37 @@ document.addEventListener('DOMContentLoaded', function () {
       console.error("Erro ao alterar status:", err);
       alert("Erro ao atualizar status.");
     });
+  });
+
+  document.getElementById("btn-excluir-agendamento")?.addEventListener("click", function () {
+    if (!eventoAtual) {
+      alert("Nenhum agendamento selecionado.");
+      return;
+    }
+
+    const confirmacao = confirm("Tem certeza que deseja excluir este agendamento?");
+    if (!confirmacao) return;
+
+    fetch("/api/cirurgia/excluir", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        prontuario: eventoAtual.extendedProps.prontuario,
+        data: eventoAtual.startStr
+      })
+    })
+      .then(res => res.json())
+      .then(resp => {
+        alert(resp.mensagem || "Agendamento removido.");
+        eventoAtual = null;
+        calendar.refetchEvents();
+      })
+      .catch(err => {
+        console.error("Erro ao excluir:", err);
+        alert("Erro ao excluir agendamento.");
+      });
   });
 });
 </script>

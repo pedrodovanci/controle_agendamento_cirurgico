@@ -1,9 +1,11 @@
 from flask import Flask, flash, render_template, redirect, session, url_for,request,jsonify
 from config import Config
-from models import db, ListaEspera, Cirurgia, Paciente, Exame
-from auth import auth, bcrypt, csrf
+from models import db, ListaEspera, Cirurgia, Paciente, Exame, Usuario
+from auth import auth, csrf, login_requerido
 from datetime import datetime, time
 from flask_migrate import Migrate
+from forms import CriarUsuarioForm
+from werkzeug.security import generate_password_hash
 
 
 app = Flask(__name__)
@@ -12,8 +14,6 @@ db.init_app(app)
 
 migrate = Migrate(app, db)
 
-
-bcrypt.init_app(app)
 csrf.init_app(app)
 app.register_blueprint(auth)
 
@@ -47,8 +47,25 @@ def api_lista_espera():
 
     return jsonify(resultado)
 
-@app.route("/novo_paciente_espera")
+@app.route("/novo_paciente_espera", methods = ["GET", "POST"])
 def novo_paciente_espera():
+    if request.method == "POST":
+        nome = request.form["nome"]
+        prontuario = request.form["prontuario"]
+        comorbidades = request.form.get("comorbidades", "")
+        tipo = request.form["tipo"]
+
+        novo = ListaEspera(
+            nome_paciente=nome,
+            prontuario=prontuario,
+            tipo_cirurgia=tipo,
+            comorbidades=comorbidades
+        )
+        db.session.add(novo)
+        db.session.commit()
+
+        flash("Paciente adicionado à lista de espera!", "success")
+        return redirect(url_for("lista_espera"))
     return render_template(
         "cadastrar_cirurgia.html",
         modo_visualizacao=False,
@@ -198,7 +215,30 @@ def cadastrar_cirurgia():
         status_padrao="espera"
     )
 
+@app.route("/admin/criar_usuario", methods=["GET", "POST"])
+@login_requerido(["admin"])
+def criar_usuario():
+    form = CriarUsuarioForm()
+    if form.validate_on_submit():
+        existente = Usuario.query.filter_by(email=form.email.data).first()
+        if existente:
+            flash("⚠️ Já existe um usuário com este e-mail.", "warning")
+        else:
+            # ⚠️ AQUI entra a criptografia da senha
+            senha_criptografada = generate_password_hash(form.senha.data)
 
+            novo = Usuario(
+                nome=form.nome.data,
+                email=form.email.data,
+                senha_hash=senha_criptografada,  # usa o campo correto
+                perfil=form.perfil.data
+            )
+            db.session.add(novo)
+            db.session.commit()
+            flash("✅ Usuário criado com sucesso!", "success")
+            return redirect(url_for("criar_usuario"))
+
+    return render_template("criar_usuario.html", form=form)
 
 @app.route("/api/cirurgias_por_data")
 def api_cirurgias_por_data():
@@ -478,15 +518,64 @@ def alterar_status_cirurgia():
             print("⚠️ Cirurgia não encontrada.")
             return jsonify({"erro": "Cirurgia não encontrada"}), 404
 
+        if novo_status == "espera":
+            # Mover para lista de espera
+            nova_espera = ListaEspera(
+                nome_paciente=cirurgia.paciente.nome,
+                prontuario=cirurgia.paciente.prontuario,
+                tipo_cirurgia=cirurgia.tipo,
+                comorbidades=cirurgia.paciente.comorbidades or "",
+                observacoes=cirurgia.observacoes or ""
+            )
+            db.session.add(nova_espera)
+            db.session.delete(cirurgia)
+            db.session.commit()
+            print("📦 Cirurgia movida para lista de espera.")
+            return jsonify({"mensagem": "Paciente movido para lista de espera."})
+
+        # Caso padrão: apenas mudar status
         cirurgia.status = novo_status
         db.session.commit()
-
         print("✅ Status atualizado com sucesso!")
         return jsonify({"mensagem": "Status atualizado com sucesso!"})
 
     except Exception as e:
-        print("💥 Erro:", e)
+        print("💥 Erro ao alterar status:", e)
         return jsonify({"erro": "Falha no servidor"}), 500
+
+@app.route("/api/cirurgia/excluir", methods=["POST"])
+@csrf.exempt
+def excluir_cirurgia():
+
+    data = request.get_json()
+    prontuario = data.get("prontuario")
+    data_str = data.get("data")
+
+    if not prontuario or not data_str:
+        return jsonify({"erro": "Dados incompletos"}), 400
+
+    data_obj = datetime.strptime(data_str, "%Y-%m-%d").date()
+
+    cirurgia = Cirurgia.query.join(Paciente).filter(
+        Paciente.prontuario == prontuario,
+        db.func.date(Cirurgia.data) == data_obj
+    ).first()
+
+    if cirurgia:
+        db.session.delete(cirurgia)
+        db.session.commit()
+        return jsonify({"mensagem": "Cirurgia excluída com sucesso!"})
+
+    return jsonify({"erro": "Agendamento não encontrado"}), 404
+
+@app.route("/api/cirurgias/canceladas/excluir_todas", methods=["POST"])
+@csrf.exempt
+def excluir_todas_canceladas():
+    canceladas = Cirurgia.query.filter_by(status="cancelada").all()
+    for c in canceladas:
+        db.session.delete(c)
+    db.session.commit()
+    return jsonify({"mensagem": f"{len(canceladas)} cirurgias excluídas com sucesso!"})
 
 
 if __name__ == '__main__':

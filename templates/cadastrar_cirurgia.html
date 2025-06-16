@@ -58,7 +58,7 @@
         <div class="mb-3">
           <label class="form-label">Materiais Utilizados</label><br>
           {% set usados = (cirurgia.materiais or '').split(',') if cirurgia else [] %}
-          {% for m in ['neuronavegador', 'asp.ultrassonico', 'cell saver'] %}
+          {% for m in ['Neuronavegador', 'Aspirador ultrassônico', 'Cell saver'] %}
           <div class="form-check">
             <input class="form-check-input" type="checkbox" name="materiais" value="{{ m }}"
               {% if m in usados %}checked{% endif %}

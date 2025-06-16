@@ -7,8 +7,9 @@
   <div class="col-md-9 mb-3">
     <div class="bg-white p-3 rounded shadow-sm">
       <div class="d-flex justify-content-between align-items-center mb-3">
-        <h6 class="mb-0">Cirurgias Canceladas</h6>
-      </div>
+      <h6 class="mb-0">Cirurgias Canceladas</h6>
+      <button class="btn btn-sm btn-danger" onclick="excluirTodosCancelados()">Excluir todos os cancelamentos</button>
+    </div>
 
       <div id="lista-canceladas" class="d-flex flex-column gap-3">
         <!-- Cards de pacientes virão aqui via JavaScript -->
@@ -73,9 +74,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const card = document.createElement("div");
         card.className = "border rounded p-3 bg-light d-flex justify-content-between align-items-center cursor-pointer";
         card.innerHTML = `
-          <div>
-            <strong>${p.nome}</strong><br>
+          <div class="d-flex flex-column">
+            <strong>${p.nome}</strong>
             <small>Prontuário: ${p.prontuario}</small>
+            <button class="btn btn-sm btn-outline-danger mt-2 w-100" onclick="excluirCirurgia('${p.prontuario}', '${p.data}')">
+              excluir agendamento
+            </button>
           </div>
           <span class="badge bg-danger rounded-pill">cancelada</span>
         `;
@@ -100,7 +104,10 @@ document.addEventListener("DOMContentLoaded", () => {
     fetch("/api/cirurgia/reagendar", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prontuario: pacienteSelecionado.prontuario, data: pacienteSelecionado.data })
+      body: JSON.stringify({
+        prontuario: pacienteSelecionado.prontuario,
+        data: pacienteSelecionado.data
+      })
     })
     .then(res => res.json())
     .then(resp => {
@@ -108,6 +115,44 @@ document.addEventListener("DOMContentLoaded", () => {
       window.location.href = "/"; // Redireciona para o calendário
     });
   });
+
+  // 🔥 Botão global para excluir todos
+  window.excluirTodosCancelados = function () {
+    if (!confirm("Deseja realmente excluir todas as cirurgias canceladas?")) return;
+
+    fetch("/api/cirurgias/canceladas/excluir_todas", {
+      method: "POST"
+    })
+    .then(res => res.json())
+    .then(resp => {
+      alert(resp.mensagem || "Todos os cancelamentos foram excluídos.");
+      location.reload();
+    })
+    .catch(err => {
+      console.error("Erro ao excluir todas:", err);
+      alert("Erro ao excluir todas as cirurgias canceladas.");
+    });
+  };
+
+  // 🔥 Função individual já usada no botão de cada card
+  window.excluirCirurgia = function (prontuario, data) {
+    if (!confirm("Tem certeza que deseja excluir este agendamento definitivamente?")) return;
+
+    fetch("/api/cirurgia/excluir", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prontuario, data })
+    })
+    .then(res => res.json())
+    .then(resp => {
+      alert(resp.mensagem || "Agendamento excluído com sucesso.");
+      location.reload();
+    })
+    .catch(err => {
+      console.error("Erro ao excluir:", err);
+      alert("Erro ao excluir agendamento.");
+    });
+  };
 });
 </script>
 {% endblock %}
