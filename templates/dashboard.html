@@ -93,150 +93,149 @@
 {% block scripts %}
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
 
-<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.8/index.global.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function () {
+      const calendarEl = document.getElementById('calendar');
+      if (!calendarEl) return;
 
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  const calendarEl = document.getElementById('calendar');
-  if (!calendarEl) return;
+      let eventoAtual = null;
 
-  let eventoAtual = null;
+      const calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'pt-br',
+        height: 550,
 
-  const calendar = new FullCalendar.Calendar(calendarEl, {
-    initialView: 'dayGridMonth',
-    locale: 'pt-br',
-    height: 550,
+        events: function(fetchInfo, successCallback, failureCallback) {
+          const status = document.getElementById('status').value;
+          fetch(`/api/cirurgias?status=${status}&_=${Date.now()}`)
+            .then(response => response.json())
+            .then(data => successCallback(data))
+            .catch(error => failureCallback(error));
+        },
 
-    events: function(fetchInfo, successCallback, failureCallback) {
-      const status = document.getElementById('status').value;
-      fetch(`/api/cirurgias?status=${status}&_=${Date.now()}`)
-        .then(response => response.json())
-        .then(data => successCallback(data))
-        .catch(error => failureCallback(error));
-    },
+        eventClick: function(info) {
+          const props = info.event.extendedProps;
+          eventoAtual = info.event;
 
-    eventClick: function(info) {
-      const props = info.event.extendedProps;
-      eventoAtual = info.event;
+          document.getElementById('ficha-nome').innerText = info.event.title;
+          document.getElementById('ficha-prontuario').innerText = props.prontuario || '---';
+          document.getElementById('ficha-medico').innerText = props.medico || '---';
+          document.getElementById('ficha-horario').innerText = props.horario || '---';
+          document.getElementById('ficha-observacoes').innerText = props.observacoes || '---';
 
-      document.getElementById('ficha-nome').innerText = info.event.title;
-      document.getElementById('ficha-prontuario').innerText = props.prontuario || '---';
-      document.getElementById('ficha-medico').innerText = props.medico || '---';
-      document.getElementById('ficha-horario').innerText = props.horario || '---';
-      document.getElementById('ficha-observacoes').innerText = props.observacoes || '---';
+          const statusSpan = document.getElementById('ficha-status');
+          statusSpan.innerText = props.status || '---';
+          statusSpan.className = 'badge px-3 py-2 rounded-pill text-white ' + (
+            {
+              agendada: 'bg-primary',
+              realizada: 'bg-success',
+              cancelada: 'bg-danger',
+              espera: 'bg-warning text-dark'
+            }[props.status] || 'bg-secondary'
+          );
 
-      const statusSpan = document.getElementById('ficha-status');
-      statusSpan.innerText = props.status || '---';
-      statusSpan.className = 'badge px-3 py-2 rounded-pill text-white ' + (
-        {
-          agendada: 'bg-primary',
-          realizada: 'bg-success',
-          cancelada: 'bg-danger',
-          espera: 'bg-warning text-dark'
-        }[props.status] || 'bg-secondary'
-      );
+          const opcaoAtual = document.getElementById('opcao-atual');
+          opcaoAtual.innerText = props.status?.charAt(0).toUpperCase() + props.status?.slice(1);
+          opcaoAtual.value = props.status || '';
+          document.getElementById('status-alterar').value = props.status || '';
+        },
 
-      const opcaoAtual = document.getElementById('opcao-atual');
-      opcaoAtual.innerText = props.status?.charAt(0).toUpperCase() + props.status?.slice(1);
-      opcaoAtual.value = props.status || '';
-      document.getElementById('status-alterar').value = props.status || '';
-    },
+        dateClick: function(info) {
+          const dataSelecionada = info.dateStr;
 
-    dateClick: function(info) {
-      const dataSelecionada = info.dateStr;
-      fetch(`/verificar_cirurgias?data=${dataSelecionada}`)
+          fetch(`/verificar_cirurgias?data=${dataSelecionada}`)
+            .then(res => res.json())
+            .then(data => {
+              if (data.tem_cirurgias) {
+                window.location.href = `/cirurgias_por_dia?data=${dataSelecionada}`;
+              } else {
+                window.location.href = `/cadastrar_cirurgia?data=${dataSelecionada}`;
+              }
+            })
+            .catch(err => {
+              console.error("Erro ao verificar cirurgias:", err);
+              window.location.href = `/cadastrar_cirurgia?data=${dataSelecionada}`;
+            });
+        }
+      });
+
+      calendar.render();
+
+      document.getElementById('mes')?.addEventListener('change', function () {
+        calendar.gotoDate(this.value);
+      });
+
+      document.getElementById('status')?.addEventListener('change', function () {
+        calendar.refetchEvents();
+      });
+
+      document.getElementById('btn-alterar-status')?.addEventListener('click', function () {
+        const novoStatus = document.getElementById('status-alterar').value;
+        if (!eventoAtual || !novoStatus || novoStatus === eventoAtual.extendedProps.status) {
+          alert("Escolha um status diferente.");
+          return;
+        }
+
+        const prontuario = eventoAtual.extendedProps.prontuario;
+        const data = eventoAtual.startStr;
+
+        fetch(`/api/cirurgia/alterar_status`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prontuario, data, novo_status: novoStatus })
+        })
         .then(res => res.json())
-        .then(data => {
-          if (data.tem_cirurgias) {
-            window.location.href = `/cirurgias_por_dia?data=${dataSelecionada}`;
-          } else {
-            window.location.href = `/cadastrar_cirurgia?data=${dataSelecionada}`;
-          }
+        .then(resp => {
+          alert(resp.mensagem || "Status alterado.");
+
+          const statusSpan = document.getElementById('ficha-status');
+          statusSpan.innerText = novoStatus;
+          const cores = {
+            agendada: 'bg-primary',
+            realizada: 'bg-success',
+            cancelada: 'bg-danger',
+            espera: 'bg-warning text-dark'
+          };
+          statusSpan.className = 'badge px-3 py-2 rounded-pill text-white ' + (cores[novoStatus] || 'bg-secondary');
+
+          calendar.refetchEvents();
         })
         .catch(err => {
-          console.error('Erro ao verificar cirurgias:', err);
+          console.error("Erro ao alterar status:", err);
+          alert("Erro ao atualizar status.");
         });
-    }
-  });
-
-  calendar.render();
-
-  document.getElementById('mes')?.addEventListener('change', function () {
-    calendar.gotoDate(this.value);
-  });
-
-  document.getElementById('status')?.addEventListener('change', function () {
-    calendar.refetchEvents();
-  });
-
-  document.getElementById('btn-alterar-status')?.addEventListener('click', function () {
-    const novoStatus = document.getElementById('status-alterar').value;
-    if (!eventoAtual || !novoStatus || novoStatus === eventoAtual.extendedProps.status) {
-      alert("Escolha um status diferente.");
-      return;
-    }
-
-    const prontuario = eventoAtual.extendedProps.prontuario;
-    const data = eventoAtual.startStr;
-
-    fetch(`/api/cirurgia/alterar_status`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prontuario, data, novo_status: novoStatus })
-    })
-    .then(res => res.json())
-    .then(resp => {
-      alert(resp.mensagem || "Status alterado.");
-
-      const statusSpan = document.getElementById('ficha-status');
-      statusSpan.innerText = novoStatus;
-      const cores = {
-        agendada: 'bg-primary',
-        realizada: 'bg-success',
-        cancelada: 'bg-danger',
-        espera: 'bg-warning text-dark'
-      };
-      statusSpan.className = 'badge px-3 py-2 rounded-pill text-white ' + (cores[novoStatus] || 'bg-secondary');
-
-      calendar.refetchEvents();
-    })
-    .catch(err => {
-      console.error("Erro ao alterar status:", err);
-      alert("Erro ao atualizar status.");
-    });
-  });
-
-  document.getElementById("btn-excluir-agendamento")?.addEventListener("click", function () {
-    if (!eventoAtual) {
-      alert("Nenhum agendamento selecionado.");
-      return;
-    }
-
-    const confirmacao = confirm("Tem certeza que deseja excluir este agendamento?");
-    if (!confirmacao) return;
-
-    fetch("/api/cirurgia/excluir", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        prontuario: eventoAtual.extendedProps.prontuario,
-        data: eventoAtual.startStr
-      })
-    })
-      .then(res => res.json())
-      .then(resp => {
-        alert(resp.mensagem || "Agendamento removido.");
-        eventoAtual = null;
-        calendar.refetchEvents();
-      })
-      .catch(err => {
-        console.error("Erro ao excluir:", err);
-        alert("Erro ao excluir agendamento.");
       });
-  });
-});
-</script>
 
+      document.getElementById("btn-excluir-agendamento")?.addEventListener("click", function () {
+        if (!eventoAtual) {
+          alert("Nenhum agendamento selecionado.");
+          return;
+        }
+
+        const confirmacao = confirm("Tem certeza que deseja excluir este agendamento?");
+        if (!confirmacao) return;
+
+        fetch("/api/cirurgia/excluir", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            prontuario: eventoAtual.extendedProps.prontuario,
+            data: eventoAtual.startStr
+          })
+        })
+          .then(res => res.json())
+          .then(resp => {
+            alert(resp.mensagem || "Agendamento removido.");
+            eventoAtual = null;
+            calendar.refetchEvents();
+          })
+          .catch(err => {
+            console.error("Erro ao excluir:", err);
+            alert("Erro ao excluir agendamento.");
+          });
+      });
+    });
+  </script>
 {% endblock %}

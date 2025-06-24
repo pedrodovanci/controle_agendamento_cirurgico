@@ -134,13 +134,19 @@
             color: #0d6efd;
             border-bottom: 2px solid #0d6efd;
         }
-
+        
+        @media (max-width: 576px) {
+        main.container {
+        padding-top: 1rem !important;
+        margin-top: 0 !important;
+        }
+    }
     </style>
 
 
 
     <!-- Conteúdo principal -->
-    <main class="container pt-5 mt-5">
+    <main class="container py-3">
         {% block content %}{% endblock %}
     </main>
 

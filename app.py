@@ -4,9 +4,10 @@ from models import db, ListaEspera, Cirurgia, Paciente, Exame, Usuario
 from auth import auth, csrf, login_requerido
 from datetime import datetime, time
 from flask_migrate import Migrate
-from forms import CriarUsuarioForm
+from forms import CriarUsuarioForm, CirurgiaForm 
 from werkzeug.security import generate_password_hash
-
+from werkzeug.utils import secure_filename
+import os
 
 app = Flask(__name__)
 app.config.from_object(Config)
@@ -77,7 +78,6 @@ def novo_paciente_espera():
         status_padrao="espera"  # vamos usar isso no HTML
     )
 
-
 @app.route("/api/cirurgias")
 def api_cirurgias():
     try:
@@ -128,53 +128,84 @@ def api_cirurgias():
         print("💥 ERRO ao gerar eventos do calendário:", e)
         return jsonify({"erro": "Falha no servidor ao buscar cirurgias"}), 500
 
-
 @app.route("/cadastrar_cirurgia", methods=["GET", "POST"])
 def cadastrar_cirurgia():
-    if request.method == "POST":
-        nome = request.form["nome"]
-        prontuario = request.form["prontuario"]
-        comorbidades = request.form.get("comorbidades", "")
-        tipo = request.form["tipo"]
-        medico = request.form["medico"]
-        status = request.form["status"]
-        data = datetime.strptime(request.form["data"], "%Y-%m-%d")
-        anticoagulante = request.form["anticoagulante"]
+    form = CirurgiaForm()
+    data_previa = request.args.get("data", "")
+    prontuario_espera = request.args.get("prontuario")
+    paciente = None
+    modo_visualizacao = False
+    modo_edicao = False
+    status_padrao = "espera"
+    exames = []
+    cirurgia = None
 
+    # Recuperar paciente da lista de espera se aplicável
+    if prontuario_espera:
+        espera = ListaEspera.query.filter_by(prontuario=prontuario_espera).first()
+        if espera:
+            paciente = Paciente(
+                nome=espera.nome_paciente,
+                prontuario=espera.prontuario,
+                comorbidades=espera.comorbidades
+            )
+
+    if form.validate_on_submit():
+        nome = form.nome.data
+        prontuario = form.prontuario.data
+        idade = form.idade.data
+        comorbidades = form.comorbidades.data
+        anticoagulante = form.anticoagulante.data
+        materiais = []
+
+        if form.neuronavegador.data:
+            materiais.append("Neuronavegador")
+        if form.aspirador.data:
+            materiais.append("Aspirador ultrassônico")
+        if form.cell_saver.data:
+            materiais.append("Cell saver")
+
+        materiais_str = ",".join(materiais)
+        outros_materiais = form.outros_materiais.data
+        data = datetime.strptime(form.data.data, "%d/%m/%Y")
+        horario_inicio = form.horario_inicio.data
+        horario_fim = form.horario_fim.data
+        tipo = form.tipo.data
+        medico = form.medico.data
+        status = form.status.data
+        observacoes = form.observacoes.data
+
+        # Cria paciente se não existir
         paciente = Paciente.query.filter_by(prontuario=prontuario).first()
         if not paciente:
-            paciente = Paciente(nome=nome, prontuario=prontuario, comorbidades=comorbidades)
+            paciente = Paciente(nome=nome, prontuario=prontuario, idade=idade, comorbidades=comorbidades)
             db.session.add(paciente)
             db.session.commit()
 
-        horario_inicio = request.form.get("horario_inicio")
-        horario_fim = request.form.get("horario_fim")
-        observacoes = request.form.get("observacoes")
-
+        # Cria cirurgia
         cirurgia = Cirurgia(
             paciente_id=paciente.id,
             data=data,
+            horario_inicio=horario_inicio,
+            horario_fim=horario_fim,
             tipo=tipo,
             medico=medico,
             status=status,
-            horario_inicio=datetime.strptime(horario_inicio, "%H:%M").time() if horario_inicio else None,
-            horario_fim=datetime.strptime(horario_fim, "%H:%M").time() if horario_fim else None,
             observacoes=observacoes,
-            anticoagulante=anticoagulante 
+            anticoagulante=anticoagulante,
+            materiais=materiais_str,
+            outros_materiais=outros_materiais
         )
         db.session.add(cirurgia)
 
-        # 🗑️ Remover da lista de espera, se existir
+        # Remove da lista de espera
         espera = ListaEspera.query.filter_by(prontuario=prontuario).first()
         if espera:
             db.session.delete(espera)
 
         db.session.commit()
 
-        # Upload de exames
-        from werkzeug.utils import secure_filename
-        import os
-
+        # Upload dos exames
         if 'exames' in request.files:
             arquivos = request.files.getlist('exames')
             for arquivo in arquivos:
@@ -184,36 +215,26 @@ def cadastrar_cirurgia():
                     novo_nome = f"{timestamp}_{filename}"
                     UPLOAD_FOLDER = os.path.join('static', 'uploads')
                     os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-                    caminho = os.path.join('static/uploads', novo_nome)
+                    caminho = os.path.join(UPLOAD_FOLDER, novo_nome)
                     arquivo.save(caminho)
+
+                    exame = Exame(cirurgia_id=cirurgia.id, caminho_arquivo=f"static/uploads/{novo_nome}")
+                    db.session.add(exame)
+
+        db.session.commit()
 
         flash("Cirurgia cadastrada com sucesso!", "success")
         return redirect(url_for("dashboard"))
 
-    # GET
-    data_previa = request.args.get("data", "")
-    prontuario_espera = request.args.get("prontuario")
-
-    paciente = None
-    if prontuario_espera:
-        espera = ListaEspera.query.filter_by(prontuario=prontuario_espera).first()
-        if espera:
-            paciente = Paciente(
-                nome=espera.nome_paciente,
-                prontuario=espera.prontuario,
-                comorbidades=espera.comorbidades,
-            )
-
-    return render_template(
-        "cadastrar_cirurgia.html",
-        modo_visualizacao=False,
-        modo_edicao=False,
-        cirurgia=None,
-        paciente=paciente,
-        exames=[],
-        data_previa=data_previa,
-        status_padrao="espera"
-    )
+    return render_template("cadastrar_cirurgia.html",
+                           form=form,
+                           modo_visualizacao=modo_visualizacao,
+                           modo_edicao=modo_edicao,
+                           status_padrao=status_padrao,
+                           data_previa=data_previa,
+                           paciente=paciente,
+                           cirurgia=cirurgia,
+                           exames=exames)
 
 @app.route("/admin/criar_usuario", methods=["GET", "POST"])
 @login_requerido(["admin"])
@@ -285,9 +306,11 @@ def api_cirurgias_por_data():
 
     return jsonify(resultado)
 
-
-@app.route("/cirurgias_por_dia")
+@app.route("/cirurgias_por_dia", methods=["GET", "POST"])
 def cirurgias_por_dia():
+    from forms import CirurgiaForm
+    form = CirurgiaForm()  # <-- ESSENCIAL
+
     data_str = request.args.get("data")
     if not data_str:
         flash("Data inválida.", "danger")
@@ -299,25 +322,48 @@ def cirurgias_por_dia():
         flash("Formato de data inválido.", "danger")
         return redirect(url_for("dashboard"))
 
-    cirurgia = Cirurgia.query.join(Paciente).filter(
+    cirurgias = Cirurgia.query.join(Paciente).filter(
         db.func.date(Cirurgia.data) == data
-    ).order_by(Cirurgia.horario_inicio.asc()).first()
+    ).order_by(Cirurgia.horario_inicio.asc()).all()
 
-    if not cirurgia:
+    if not cirurgias:
         flash("Nenhuma cirurgia agendada para este dia.", "warning")
         return redirect(url_for("dashboard"))
 
-    exames = Exame.query.filter_by(cirurgia_id=cirurgia.id).all()
+    fichas_serializadas = []
+    for c in cirurgias:
+        fichas_serializadas.append({
+            "id": c.id,
+            "paciente": {
+                "nome": c.paciente.nome,
+                "prontuario": c.paciente.prontuario,
+                "idade": c.paciente.idade,
+                "comorbidades": c.paciente.comorbidades
+            },
+            "tipo": c.tipo,
+            "medico": c.medico,
+            "status": c.status,
+            "data": c.data.strftime("%Y-%m-%d") if c.data else "",
+            "horario_inicio": c.horario_inicio.strftime("%H:%M") if c.horario_inicio else "",
+            "horario_fim": c.horario_fim.strftime("%H:%M") if c.horario_fim else "",
+            "observacoes": c.observacoes,
+            "anticoagulante": c.anticoagulante,
+            "materiais": c.materiais or "",
+            "outros_materiais": c.outros_materiais
+        })
+
+    exames = Exame.query.filter_by(cirurgia_id=cirurgias[0].id).all()
 
     return render_template(
         "cadastrar_cirurgia.html",
+        form=form,
         modo_visualizacao=True,
-        cirurgia=cirurgia,
-        paciente=cirurgia.paciente,
+        cirurgias=fichas_serializadas,
+        cirurgia=cirurgias[0],
+        paciente=cirurgias[0].paciente,
         exames=exames,
-        data_previa=cirurgia.data.strftime('%Y-%m-%d')
+        data_previa=data_str
     )
-
 
 @app.route("/editar_cirurgia/<int:cirurgia_id>", methods=["GET", "POST"])
 def editar_cirurgia(cirurgia_id):
@@ -338,7 +384,15 @@ def editar_cirurgia(cirurgia_id):
         cirurgia.horario_inicio = datetime.strptime(request.form["horario_inicio"], "%H:%M").time() if request.form.get("horario_inicio") else None
         cirurgia.horario_fim = datetime.strptime(request.form["horario_fim"], "%H:%M").time() if request.form.get("horario_fim") else None
         cirurgia.anticoagulante = request.form.get("anticoagulante")
-        cirurgia.materiais = ",".join(request.form.getlist("materiais"))
+        materiais = []
+        if request.form.get("neuronavegador"):
+            materiais.append("Neuronavegador")
+        if request.form.get("aspirador"):
+            materiais.append("Aspirador ultrassônico")
+        if request.form.get("cell_saver"):
+            materiais.append("Cell saver")
+
+        cirurgia.materiais = ",".join(materiais)
         cirurgia.outros_materiais = request.form.get("outros_materiais")
         cirurgia.observacoes = request.form.get("observacoes")
 
@@ -371,16 +425,15 @@ def editar_cirurgia(cirurgia_id):
         data_previa=cirurgia.data.strftime('%Y-%m-%d')
     )
 
-
 @app.route("/verificar_cirurgias")
 def verificar_cirurgias():
     data = request.args.get("data")
     if not data:
         return jsonify({"erro": "Data não fornecida"}), 400
-
+    
+    from sqlalchemy import func
     data_formatada = datetime.strptime(data, "%Y-%m-%d")
-    cirurgias = Cirurgia.query.filter(Cirurgia.data == data_formatada).count()
-
+    cirurgias = Cirurgia.query.filter(func.date(Cirurgia.data) == data_formatada.date()).count()
     return jsonify({"tem_cirurgias": cirurgias > 0})
 
 @app.route("/api/cirurgia/cancelar", methods=["POST"])
